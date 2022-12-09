@@ -188,8 +188,6 @@
 			this.IgnoreCaseButton.Size = new System.Drawing.Size(23, 22);
 			this.IgnoreCaseButton.Text = "Ignore Case";
 			this.IgnoreCaseButton.ToolTipText = "Ignore character case";
-			this.IgnoreCaseButton.MouseEnter += new System.EventHandler(this.IgnoreCaseButton_MouseEnter);
-			this.IgnoreCaseButton.MouseLeave += new System.EventHandler(this.IgnoreCaseButton_MouseLeave);
 			// 
 			// MultilineButton
 			// 
@@ -254,7 +252,7 @@
 		private System.Windows.Forms.ToolStripMenuItem fileToolStripMenuItem;
 		private System.Windows.Forms.ToolStripMenuItem OpenMenu;
 		private System.Windows.Forms.OpenFileDialog OpenFileDialog;
-		private System.Windows.Forms.TextBox TextBox;
+		public System.Windows.Forms.TextBox TextBox;
 		private System.Windows.Forms.TextBox Expression;
 		private System.Windows.Forms.TextBox Result;
 		private System.Windows.Forms.ToolStripMenuItem optionsToolStripMenuItem;

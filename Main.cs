@@ -1,144 +1,111 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Text.RegularExpressions;
-using System.Windows.Forms;
 using Microsoft.Win32;
+using System.Text.RegularExpressions;
+using TNT.ToolStripItemManager;
 using TNT.Utilities;
-using TNT.Utilities.CommandManagement;
+using TNT.VSRegexValidator.ItemGroups;
 
-namespace TNT.VSRegexValidator
+namespace TNT.VSRegexValidator;
+
+public partial class Main : Form
 {
-	public partial class Main : Form
+	ApplicationRegistry m_Registry;
+	ToolStripItemGroupManager itemGroupManager;
+	IgnoreCaseToolStripItemGroup? ignoreCaseToolStripItemGroup;
+	MultilineToolStripItemGroup? multilineToolStripItemGroup;
+
+	public Main()
 	{
-		ApplicationRegistry m_Registry = new ApplicationRegistry(Registry.CurrentUser, "Tripp'n Technology", "VSRegexValidator");
-		CommandManager m_CommandManager = null;
+		InitializeComponent();
 
-		public Main()
+		m_Registry = new ApplicationRegistry(this, Registry.CurrentUser, "Tripp'n Technology", "VSRegexValidator");
+
+		itemGroupManager = new ToolStripItemGroupManager(toolStripStatusLabel1);
+		itemGroupManager.Create<OpenToolStripItemGroup>(new ToolStripItem[] { OpenMenu, OpenButton }, OpenButton.Image, this);
+		ignoreCaseToolStripItemGroup = itemGroupManager.Create<IgnoreCaseToolStripItemGroup>(new ToolStripItem[] { IgnoreCaseMenu, IgnoreCaseButton }, IgnoreCaseButton.Image);
+		multilineToolStripItemGroup = itemGroupManager.Create<MultilineToolStripItemGroup>(new ToolStripItem[] { MultilineMenu, MultilineButton }, MultilineButton.Image);
+	}
+
+	private void StatusBarHintChanged(string hint)
+	{
+		toolStripStatusLabel1.Text = hint;
+	}
+
+	private void Expression_KeyUp(object sender, KeyEventArgs e)
+	{
+		if (e.KeyCode == Keys.Return)
 		{
-			InitializeComponent();
-
-			m_CommandManager = new CommandManager(StatusBarHintChanged);
-
-			Command cmd = m_CommandManager.Create("IgnoreCase", null, null);
-			cmd.Add(IgnoreCaseMenu);
-			cmd.Add(IgnoreCaseButton);
-
-			cmd = m_CommandManager.Create("Open", Open, null);
-			cmd.Add(OpenMenu);
-			cmd.Add(OpenButton);
-
-			cmd = m_CommandManager.Create("Multiline", null, null);
-			cmd.Add(MultilineMenu);
-			cmd.Add(MultilineButton);
+			m_Registry.WriteString("Expression", Expression.Text);
+			Result.Lines = GetValueUsingRegEx(TextBox.Text, Expression.Text).ToArray();
 		}
+	}
 
-		private void StatusBarHintChanged(string hint)
-		{
-			toolStripStatusLabel1.Text = hint;
-		}
+	private List<string> GetValueUsingRegEx(String msg, String regExp)
+	{
+		List<string> rtnValue = new List<string>();
 
-		private void Open(Command cmd)
+		rtnValue.Add(string.Format("Exp: {0}", regExp));
+
+		try
 		{
-			if (OpenFileDialog.ShowDialog() == DialogResult.OK)
+			RegexOptions regExOptions = (multilineToolStripItemGroup?.Checked == true ? RegexOptions.Multiline : 0) |
+																	(ignoreCaseToolStripItemGroup?.Checked == true ? RegexOptions.IgnoreCase : 0);
+			MatchCollection matches = Regex.Matches(msg, regExp, regExOptions);
+			MatchCollection tags = Regex.Matches(regExp, @"\?<(?<tag>[^>]*)>", RegexOptions.Multiline);
+			List<string> tagList = new List<string>();
+
+			foreach (Match match in tags)
 			{
-				using (StreamReader sr = new StreamReader(OpenFileDialog.FileName))
+				if (match.Success)
 				{
-					TextBox.Lines = sr.ReadToEnd().Replace("\r", "\n").Replace("\n\n", "\n").Split('\n');// Regex.Replace(sr.ReadToEnd(), "\r", "\n").Replace('\n'.Split('\n');
+					tagList.Add(match.Groups["tag"].ToString());
 				}
 			}
-		}
 
-		private void Expression_KeyUp(object sender, KeyEventArgs e)
-		{
-			if (e.KeyCode == Keys.Return)
+			foreach (Match match in matches)
 			{
-				m_Registry.WriteString("Expression", Expression.Text);
-				Result.Lines = GetValueUsingRegEx(TextBox.Text, Expression.Text).ToArray();
-			}
-		}
-
-		private List<string> GetValueUsingRegEx(String msg, String regExp)
-		{
-			List<string> rtnValue = new List<string>();
-
-			rtnValue.Add(string.Format("Exp: {0}", regExp));
-
-			try
-			{
-				RegexOptions regExOptions = (m_CommandManager["Multiline"].Checked ? RegexOptions.Multiline : 0) |
-																		(m_CommandManager["IgnoreCase"].Checked ? RegexOptions.IgnoreCase : 0);
-				MatchCollection matches = Regex.Matches(msg, regExp, regExOptions);
-				MatchCollection tags = Regex.Matches(regExp, @"\?<(?<tag>[^>]*)>", RegexOptions.Multiline);
-				List<string> tagList = new List<string>();
-
-				foreach (Match match in tags)
+				if (match.Success)
 				{
-					if (match.Success)
+					foreach (string tag in tagList)
 					{
-						tagList.Add(match.Groups["tag"].ToString());
+						rtnValue.Add(string.Format("{0}: {1}", tag, match.Groups[tag].ToString()));
 					}
 				}
+			}
 
+			if (matches.Count > 0)
+			{
 				foreach (Match match in matches)
 				{
 					if (match.Success)
 					{
-						foreach (string tag in tagList)
+						for (int groupIndex = 0; groupIndex < match.Groups.Count; groupIndex++)
 						{
-							rtnValue.Add(string.Format("{0}: {1}", tag, match.Groups[tag].ToString()));
+							rtnValue.Add(string.Format("{0}: {1}", groupIndex, match.Groups[groupIndex].ToString()));
 						}
 					}
-				}
-
-				if (matches.Count > 0)
-				{
-					foreach (Match match in matches)
-					{
-						if (match.Success)
-						{
-							for (int groupIndex = 0; groupIndex < match.Groups.Count; groupIndex++)
-							{
-								rtnValue.Add(string.Format("{0}: {1}", groupIndex, match.Groups[groupIndex].ToString()));
-							}
-						}
-					}
-				}
-				else
-				{
-					rtnValue.Add("No match found!");
 				}
 			}
-			catch (Exception e)
+			else
 			{
-				rtnValue.Add(e.Message);
+				rtnValue.Add("No match found!");
 			}
-
-			return rtnValue;
 		}
-
-		private void Main_FormLoad(object sender, EventArgs e)
+		catch (Exception e)
 		{
-			m_Registry.LoadFormState(this);
-
-			TextBox.Height = m_Registry.ReadInteger("TextBoxHeight", TextBox.Height);
-			Expression.Text = m_Registry.ReadString("Expression", "");
+			rtnValue.Add(e.Message);
 		}
 
-		private void Main_FormClosing(object sender, FormClosingEventArgs e)
-		{
-			m_Registry.WriteInteger("TextBoxHeight", TextBox.Height);
-			m_Registry.SaveFormState(this);
-		}
+		return rtnValue;
+	}
 
-		private void IgnoreCaseButton_MouseEnter(object sender, EventArgs e)
-		{
+	private void Main_FormLoad(object sender, EventArgs e)
+	{
+		TextBox.Height = m_Registry.ReadInteger("TextBoxHeight", TextBox.Height);
+		Expression.Text = m_Registry.ReadString("Expression", "");
+	}
 
-		}
-
-		private void IgnoreCaseButton_MouseLeave(object sender, EventArgs e)
-		{
-
-		}
+	private void Main_FormClosing(object sender, FormClosingEventArgs e)
+	{
+		m_Registry.WriteInteger("TextBoxHeight", TextBox.Height);
 	}
 }
